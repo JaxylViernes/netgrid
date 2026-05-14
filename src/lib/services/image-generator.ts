@@ -72,7 +72,7 @@ export interface GeneratedImage {
 // words, so each scene below names a specific environment, props, and
 // lighting style the model can actually render.
 
-const SUB_NICHE_VISUALS: Record<SubNicheId, string> = {
+const SUB_NICHE_VISUALS: Partial<Record<SubNicheId, string>> = {
   1: "interior of a sports medicine rehabilitation clinic with a treatment bench, foam rollers and resistance bands on a padded mat, daylight from large windows, documentary photography",
   2: "shallow depth-of-field shot of an open neuroscience textbook on a wooden desk with a brass reading lamp, anatomical diagrams of synapses visible on the page, warm late-afternoon light",
   3: "wide shot of an older athlete running on a mountain trail at golden hour, silhouette only, dramatic backlight, no facial detail",

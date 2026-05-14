@@ -174,15 +174,7 @@ export default async function ClientDetailPage({
 
   if (!client) notFound();
 
-  const blogs = blogsResult.blogs.map((blog) => ({
-    ...blog,
-    postingFrequencyDays: Array.isArray(blog.postingFrequencyDays)
-      ? (blog.postingFrequencyDays[0] ?? null)
-      : blog.postingFrequencyDays,
-  }));
-
   const blogDomainById = new Map(blogsResult.blogs.map((b) => [b.id, b.domain]));
-
 
   const internalChatNotes = messages
     .filter((m) => m.message.isInternal === true)
@@ -408,9 +400,10 @@ export default async function ClientDetailPage({
           </div>
         </TabsContent>
 
-         <TabsContent value="blogs" className="pt-4">
+        {/* Blogs Tab */}
+        <TabsContent value="blogs" className="pt-4">
           <BlogTable
-            blogs={blogs}  
+            blogs={blogsResult.blogs}
             totalCount={blogsResult.totalCount}
             page={blogsResult.page}
             pageSize={blogsResult.pageSize}
@@ -420,6 +413,7 @@ export default async function ClientDetailPage({
             rowTarget="posts"
           />
         </TabsContent>
+
         {/* SEO Tab */}
         <TabsContent value="seo" className="space-y-6 pt-4">
           <Card>

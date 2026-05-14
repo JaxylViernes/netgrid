@@ -167,8 +167,9 @@ async function seedBlogs(clientIds: Record<string, string>) {
       platform: "wordpress" as const,
       wpUrl: "https://acme-insights.com",
       seoPlugin: "yoast" as const,
-      postingFrequency: "3x per week",
-      postingFrequencyDays: 2,
+      // ISO weekdays (1=Mon … 7=Sun) — "3x per week" → Mon, Wed, Fri
+      postingFrequency: "weekly",
+      postingFrequencyDays: [1, 3, 5],
       status: "active" as const,
     },
     {
@@ -177,8 +178,9 @@ async function seedBlogs(clientIds: Record<string, string>) {
       platform: "wordpress" as const,
       wpUrl: "https://acme-devblog.io",
       seoPlugin: "rankmath" as const,
-      postingFrequency: "Weekly",
-      postingFrequencyDays: 7,
+      // "Weekly" → once per week on Wednesday
+      postingFrequency: "weekly",
+      postingFrequencyDays: [3],
       status: "active" as const,
     },
     {
@@ -187,8 +189,9 @@ async function seedBlogs(clientIds: Record<string, string>) {
       platform: "shopify" as const,
       shopifyStoreUrl: "brightstore.myshopify.com",
       shopifyApiVersion: "2024-07",
-      postingFrequency: "2x per week",
-      postingFrequencyDays: 3,
+      // "2x per week" → Tue + Thu
+      postingFrequency: "weekly",
+      postingFrequencyDays: [2, 4],
       status: "active" as const,
     },
     {
@@ -197,8 +200,9 @@ async function seedBlogs(clientIds: Record<string, string>) {
       platform: "wordpress" as const,
       wpUrl: "https://vitality-wellness.co",
       seoPlugin: "yoast" as const,
-      postingFrequency: "Weekly",
-      postingFrequencyDays: 7,
+      // "Weekly" → once per week on Tuesday
+      postingFrequency: "weekly",
+      postingFrequencyDays: [2],
       status: "setup" as const,
     },
   ];

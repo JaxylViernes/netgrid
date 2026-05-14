@@ -85,7 +85,13 @@ function Field({
   errors,
   valueAsNumber,
 }: FieldProps) {
-  const error = errors[name];
+  // `name` may resolve to a nested path like `postingFrequencyDays.0` because
+  // the schema includes array fields. We only render <Field> for top-level
+  // string/string-optional fields, so a string-indexed lookup is safe — but
+  // TS can't narrow that from `Path<CreateBlogInput>`. Cast to a generic
+  // record indexer to satisfy the type checker.
+  const error = (errors as Record<string, { message?: unknown } | undefined>)[name];
+  const errorMessage = typeof error?.message === "string" ? error.message : undefined;
   return (
     <div className="space-y-1.5">
       <Label htmlFor={name}>{label}</Label>
@@ -95,8 +101,8 @@ function Field({
         placeholder={placeholder}
         {...register(name, valueAsNumber ? { valueAsNumber: true } : {})}
       />
-      {error && (
-        <p className="text-xs text-destructive">{error.message as string}</p>
+      {errorMessage && (
+        <p className="text-xs text-destructive">{errorMessage}</p>
       )}
     </div>
   );

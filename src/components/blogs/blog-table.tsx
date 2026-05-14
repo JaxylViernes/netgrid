@@ -56,7 +56,7 @@ interface BlogRow {
   lastPostVerifiedAt: Date | null;
   lastPostTitle: string | null;
   postingFrequency: string | null;
-  postingFrequencyDays: number | null;
+  postingFrequencyDays: number[] | null;
   createdAt: Date;
 }
 

@@ -31,19 +31,6 @@ export const createClientSchema = z.object({
     .int("Must be a whole number")
     .min(0, "Must be 0 or more")
     .optional(),
-  billingType: z.enum(["one_time", "monthly", "yearly"]).optional(),
-  billingAmount: z.coerce
-    .number()
-    .min(0, "Billing amount must be 0 or more")
-    .optional(),
-  setupFee: z.coerce
-    .number()
-    .min(0, "Setup fee must be 0 or more")
-    .optional(),
-  setupFeePaid: z.boolean().optional(),
-  billingStartDate: z.string().optional().or(z.literal("")),
-  nextBillingDate: z.string().optional().or(z.literal("")),
-  billingStatus: z.enum(["active", "overdue", "paused", "cancelled"]).optional(),
   notesInternal: z.string().optional().or(z.literal("")),
   status: z.enum(["onboarding", "active", "paused", "churned"]).optional(),
 });

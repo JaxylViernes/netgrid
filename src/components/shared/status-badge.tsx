@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type StatusType = "client" | "blog" | "invoice" | "issue" | "alert";
+type StatusType = "client" | "blog" | "issue" | "alert";
 
 interface StatusConfig {
   className: string;
@@ -20,13 +20,6 @@ const statusMap: Record<StatusType, Record<string, StatusConfig>> = {
     scheduled: { className: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
     expired: { className: "bg-red-500/15 text-red-700 dark:text-red-400" },
     flagged: { className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  },
-  invoice: {
-    paid: { className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
-    pending: { className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-    overdue: { className: "bg-red-500/15 text-red-700 dark:text-red-400" },
-    draft: { className: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400" },
-    cancelled: { className: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400" },
   },
   issue: {
     open: { className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },

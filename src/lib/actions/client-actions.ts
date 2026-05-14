@@ -5,7 +5,6 @@ import {
   clients,
   blogs,
   seoScans,
-  invoices,
   messages,
   activityLog,
 } from "@/lib/db/schema";
@@ -120,13 +119,6 @@ export async function createClient(data: CreateClientInput) {
       contactPhone: parsed.contactPhone || null,
       niche: parsed.niche || null,
       totalBlogsTarget: parsed.totalBlogsTarget ?? 0,
-      billingType: parsed.billingType ?? "monthly",
-      billingAmount: parsed.billingAmount?.toString() ?? "0",
-      setupFee: parsed.setupFee?.toString() ?? "0",
-      setupFeePaid: parsed.setupFeePaid ?? false,
-      billingStartDate: parsed.billingStartDate || null,
-      nextBillingDate: parsed.nextBillingDate || null,
-      billingStatus: parsed.billingStatus ?? "active",
       notesInternal: parsed.notesInternal || null,
       status: parsed.status ?? "onboarding",
     })
@@ -161,13 +153,6 @@ export async function updateClient(id: string, data: UpdateClientInput) {
   if (parsed.contactPhone !== undefined) updateData.contactPhone = parsed.contactPhone || null;
   if (parsed.niche !== undefined) updateData.niche = parsed.niche || null;
   if (parsed.totalBlogsTarget !== undefined) updateData.totalBlogsTarget = parsed.totalBlogsTarget;
-  if (parsed.billingType !== undefined) updateData.billingType = parsed.billingType;
-  if (parsed.billingAmount !== undefined) updateData.billingAmount = parsed.billingAmount.toString();
-  if (parsed.setupFee !== undefined) updateData.setupFee = parsed.setupFee.toString();
-  if (parsed.setupFeePaid !== undefined) updateData.setupFeePaid = parsed.setupFeePaid;
-  if (parsed.billingStartDate !== undefined) updateData.billingStartDate = parsed.billingStartDate || null;
-  if (parsed.nextBillingDate !== undefined) updateData.nextBillingDate = parsed.nextBillingDate || null;
-  if (parsed.billingStatus !== undefined) updateData.billingStatus = parsed.billingStatus;
   if (parsed.notesInternal !== undefined) updateData.notesInternal = parsed.notesInternal || null;
   if (parsed.status !== undefined) updateData.status = parsed.status;
 
@@ -241,18 +226,6 @@ export async function getClientStats(id: string) {
     .from(seoScans)
     .where(eq(seoScans.clientId, id));
 
-  const [invoiceStats] = await db
-    .select({
-      activeInvoices: count(),
-    })
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.clientId, id),
-        sql`${invoices.status} IN ('draft', 'sent')`
-      )
-    );
-
   const [messageStats] = await db
     .select({
       messageCount: count(),
@@ -276,7 +249,6 @@ export async function getClientStats(id: string) {
   return {
     blogCount: blogStats?.blogCount ?? 0,
     avgSeoScore: seoStats?.avgScore ? Math.round(Number(seoStats.avgScore)) : null,
-    activeInvoices: invoiceStats?.activeInvoices ?? 0,
     messageCount: messageStats?.messageCount ?? 0,
     postsThisMonth: postsThisMonth?.totalPosts ?? 0,
   };

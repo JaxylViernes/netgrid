@@ -9,10 +9,8 @@ import {
   FileText,
   Search,
   AlertTriangle,
-  RefreshCw,
   CalendarClock,
   MessageSquare,
-  Receipt,
   BarChart3,
   Activity,
   Settings,
@@ -45,38 +43,36 @@ const navGroups: NavGroup[] = [
   {
     label: "Overview",
     items: [
-      { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     ],
   },
   {
     label: "Manage",
     items: [
-      { title: "Clients", href: "/admin/clients", icon: Users },
-      { title: "Blogs", href: "/admin/blogs", icon: FileText },
-      { title: "SEO", href: "/admin/seo", icon: Search },
-      { title: "Fix Queue", href: "/admin/fix-queue", icon: AlertTriangle },
+      { title: "Clients", href: "/clients", icon: Users },
+      { title: "Blogs", href: "/blogs", icon: FileText },
+      { title: "SEO", href: "/seo", icon: Search },
+      { title: "Fix Queue", href: "/seo/fix-queue", icon: AlertTriangle },
     ],
   },
   {
     label: "Operations",
     items: [
-      { title: "Renewals", href: "/admin/renewals", icon: RefreshCw },
-      { title: "Post Schedule", href: "/admin/post-schedule", icon: CalendarClock },
-      { title: "Messages", href: "/admin/messages", icon: MessageSquare },
+      { title: "Post Schedule", href: "/posts", icon: CalendarClock },
+      { title: "Messages", href: "/messages", icon: MessageSquare },
     ],
   },
   {
-    label: "Finance",
+    label: "Reporting",
     items: [
-      { title: "Invoices", href: "/admin/invoices", icon: Receipt },
-      { title: "Reports", href: "/admin/reports", icon: BarChart3 },
+      { title: "Reports", href: "/reports", icon: BarChart3 },
     ],
   },
   {
     label: "System",
     items: [
-      { title: "Activity Log", href: "/admin/activity", icon: Activity },
-      { title: "Settings", href: "/admin/settings", icon: Settings },
+      { title: "Activity Log", href: "/activity", icon: Activity },
+      { title: "Settings", href: "/settings", icon: Settings },
     ],
   },
 ];
@@ -90,7 +86,7 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const pathname = usePathname();
 
   function isActive(href: string) {
-    if (href === "/admin") return pathname === "/admin";
+    if (href === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(href);
   }
 
@@ -103,7 +99,7 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
     >
       {/* Logo */}
       <div className="flex h-14 items-center border-b px-4">
-        <Link href="/admin" className="flex items-center gap-2 overflow-hidden">
+        <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden">
           <Globe className="size-6 shrink-0 text-primary" />
           {!collapsed && (
             <span className="text-lg font-semibold tracking-tight">

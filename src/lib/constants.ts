@@ -20,17 +20,6 @@ export const SEO_SCORE_RANGES = [
   { min: 0, max: 39, label: "Critical", color: "text-red-600", bg: "bg-red-100" },
 ] as const;
 
-// Renewal Alert Thresholds (days)
-export const RENEWAL_THRESHOLDS = [
-  { days: 30, level: "info" as const },
-  { days: 14, level: "warning" as const },
-  { days: 7, level: "urgent" as const },
-  { days: 0, level: "overdue" as const },
-];
-
-// Invoice Reminder Schedule (days after due date)
-export const INVOICE_REMINDER_DAYS = [1, 7, 14, 30];
-
 // Post Verification Alert Escalation
 export const POST_ALERT_LEVELS = {
   warning: 1,   // 1x missed threshold
@@ -54,6 +43,3 @@ export const MAX_PAGE_SIZE = 100;
 // Magic Link
 export const MAGIC_LINK_EXPIRY_MINUTES = 15;
 export const CLIENT_SESSION_DAYS = 7;
-
-// Invoice Number Prefix
-export const INVOICE_PREFIX = "NG";

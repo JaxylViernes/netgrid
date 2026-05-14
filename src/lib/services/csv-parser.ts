@@ -10,8 +10,6 @@ export interface CsvBlogRow {
   seoPlugin: SeoPlugin;
   hostingProvider: string;
   registrar: string;
-  domainExpiryDate: string;
-  hostingExpiryDate: string;
   postingFrequency: string;
 }
 
@@ -24,8 +22,6 @@ export interface BlogInsert {
   seoPlugin: SeoPlugin;
   hostingProvider: string | null;
   registrar: string | null;
-  domainExpiryDate: string | null;
-  hostingExpiryDate: string | null;
   postingFrequency: string | null;
   status: "setup";
 }
@@ -51,14 +47,11 @@ const EXPECTED_COLUMNS = [
   "seo_plugin",
   "hosting_provider",
   "registrar",
-  "domain_expiry_date",
-  "hosting_expiry_date",
   "posting_frequency",
 ] as const;
 
 const DOMAIN_REGEX = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 const URL_REGEX = /^https?:\/\/.+/;
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_SEO_PLUGINS: SeoPlugin[] = ["yoast", "rankmath", "none"];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -103,13 +96,6 @@ function validateDomain(value: string): boolean {
 function validateUrl(value: string): boolean {
   if (!value) return true; // optional
   return URL_REGEX.test(value);
-}
-
-function validateDate(value: string): boolean {
-  if (!value) return true; // optional
-  if (!DATE_REGEX.test(value)) return false;
-  const date = new Date(value);
-  return !isNaN(date.getTime());
 }
 
 function validateSeoPlugin(value: string): value is SeoPlugin {
@@ -180,8 +166,6 @@ export function parseBlogCsv(csvContent: string, clientId: string): CsvParseResu
     const seoPluginRaw = getValue("seo_plugin").toLowerCase() || "none";
     const hostingProvider = getValue("hosting_provider");
     const registrar = getValue("registrar");
-    const domainExpiryDate = getValue("domain_expiry_date");
-    const hostingExpiryDate = getValue("hosting_expiry_date");
     const postingFrequency = getValue("posting_frequency");
 
     // Validate domain (required)
@@ -205,23 +189,6 @@ export function parseBlogCsv(csvContent: string, clientId: string): CsvParseResu
       });
     }
 
-    // Validate dates
-    if (domainExpiryDate && !validateDate(domainExpiryDate)) {
-      rowErrors.push({
-        row: rowNum,
-        field: "domain_expiry_date",
-        message: `Invalid date format: ${domainExpiryDate}. Use YYYY-MM-DD`,
-      });
-    }
-
-    if (hostingExpiryDate && !validateDate(hostingExpiryDate)) {
-      rowErrors.push({
-        row: rowNum,
-        field: "hosting_expiry_date",
-        message: `Invalid date format: ${hostingExpiryDate}. Use YYYY-MM-DD`,
-      });
-    }
-
     if (rowErrors.length > 0) {
       errors.push(...rowErrors);
     } else {
@@ -234,8 +201,6 @@ export function parseBlogCsv(csvContent: string, clientId: string): CsvParseResu
         seoPlugin: seoPluginRaw as SeoPlugin,
         hostingProvider: hostingProvider || null,
         registrar: registrar || null,
-        domainExpiryDate: domainExpiryDate || null,
-        hostingExpiryDate: hostingExpiryDate || null,
         postingFrequency: postingFrequency || null,
         status: "setup",
       });

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getBlog, getClientsForSelect } from "@/lib/actions/blog-actions";
+import { getBlog, getBlogPosts, getClientsForSelect } from "@/lib/actions/blog-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,9 @@ import {
 import { CredentialDisplay } from "@/components/blogs/credential-display";
 import { WpConnectionTest } from "@/components/blogs/wp-connection-test";
 import { BlogForm } from "@/components/blogs/blog-form";
+import { BlogPostsPanel } from "@/components/blogs/blog-posts-panel";
+import { StyleProfilePanel } from "@/components/blogs/style-profile-panel";
+import { getStyleProfileForBlog } from "@/lib/actions/style-profile-actions";
 import {
   ArrowLeft,
   Pencil,
@@ -22,13 +25,17 @@ import {
   Calendar,
   FileText,
   BarChart3,
+  ShoppingBag,
+  Newspaper,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface BlogDetailPageProps {
   params: { blogId: string };
-  searchParams: { edit?: string };
+  searchParams: {
+    edit?: string;
+  };
 }
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -95,10 +102,19 @@ export default async function BlogDetailPage({
           defaultValues={{
             clientId: blog.clientId,
             domain: blog.domain,
+            platform: (blog.platform as "wordpress" | "shopify") || "wordpress",
+            // WordPress
             wpUrl: blog.wpUrl || "",
             wpUsername: blog.wpUsername || "",
             wpAppPassword: blog.wpAppPassword || "",
             seoPlugin: (blog.seoPlugin as "yoast" | "rankmath" | "none") || "none",
+            // Shopify (Dev Dashboard / client_credentials)
+            shopifyStoreUrl: blog.shopifyStoreUrl || "",
+            shopifyClientId: blog.shopifyClientId || "",
+            shopifyClientSecret: blog.shopifyClientSecret || "",
+            shopifyApiVersion: blog.shopifyApiVersion || "2024-07",
+            shopifyBlogId: blog.shopifyBlogId || "",
+            // Hosting / registrar (kept on the row, hidden in the form UI)
             hostingProvider: blog.hostingProvider || "",
             hostingLoginUrl: blog.hostingLoginUrl || "",
             hostingUsername: blog.hostingUsername || "",
@@ -107,12 +123,10 @@ export default async function BlogDetailPage({
             registrarLoginUrl: blog.registrarLoginUrl || "",
             registrarUsername: blog.registrarUsername || "",
             registrarPassword: blog.registrarPassword || "",
-            domainExpiryDate: blog.domainExpiryDate || "",
-            hostingExpiryDate: blog.hostingExpiryDate || "",
-            sslExpiryDate: blog.sslExpiryDate || "",
+            // Posting cadence + status
             postingFrequency: blog.postingFrequency || "",
             postingFrequencyDays: blog.postingFrequencyDays ?? undefined,
-            status: (blog.status as "active" | "paused" | "setup" | "decommissioned") || "setup",
+            status: (blog.status as "active" | "paused" | "setup" | "decommissioned") || "active",
             notesInternal: blog.notesInternal || "",
           }}
         />
@@ -120,7 +134,26 @@ export default async function BlogDetailPage({
     );
   }
 
-  // Detail view
+  // Detail view — also fetch posts in parallel with the rest of the page render.
+  const postsResult = await getBlogPosts(params.blogId).catch((err) => ({
+    generated: [],
+    live: {
+      available: false,
+      platform: blog.platform,
+      posts: [],
+      page: 1,
+      perPage: 20,
+      total: 0,
+      totalPages: 0,
+      error: err instanceof Error ? err.message : "Failed to load posts",
+    },
+  }));
+
+  // Style profile (peptide blogs only — returns null otherwise).
+  const styleProfile = await getStyleProfileForBlog(params.blogId).catch(() => null);
+
+  const isShopify = blog.platform === "shopify";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,6 +170,9 @@ export default async function BlogDetailPage({
               <Badge variant={STATUS_VARIANTS[blog.status ?? "setup"] ?? "outline"}>
                 {blog.status ?? "setup"}
               </Badge>
+              <Badge variant="outline" className="capitalize">
+                {blog.platform}
+              </Badge>
             </div>
             <p className="text-muted-foreground">
               Client: {blog.clientName}
@@ -145,6 +181,12 @@ export default async function BlogDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <WpConnectionTest blogId={params.blogId} />
+          <Link href={`/blogs/${params.blogId}/posts`}>
+            <Button variant="outline">
+              <Newspaper className="size-4" data-icon="inline-start" />
+              View Posts
+            </Button>
+          </Link>
           <Link href={`/blogs/${params.blogId}?edit=true`}>
             <Button variant="outline">
               <Pencil className="size-4" data-icon="inline-start" />
@@ -165,28 +207,62 @@ export default async function BlogDetailPage({
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <InfoRow label="Domain" value={blog.domain} />
-            <InfoRow label="WordPress URL" value={blog.wpUrl} />
-            <InfoRow label="SEO Plugin" value={blog.seoPlugin} />
+            <InfoRow label="Platform" value={blog.platform} />
+            {isShopify ? (
+              <>
+                <InfoRow label="Shopify Store URL" value={blog.shopifyStoreUrl} />
+                <InfoRow label="API Version" value={blog.shopifyApiVersion} />
+              </>
+            ) : (
+              <>
+                <InfoRow label="WordPress URL" value={blog.wpUrl} />
+                <InfoRow label="SEO Plugin" value={blog.seoPlugin} />
+              </>
+            )}
             <InfoRow label="Status" value={blog.status} />
           </CardContent>
         </Card>
 
-        {/* WordPress Credentials */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-4" />
-              WordPress Credentials
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <CredentialDisplay label="Username" value={blog.wpUsername} />
-            <CredentialDisplay label="Application Password" value={blog.wpAppPassword} />
-          </CardContent>
-        </Card>
+        {/* Credentials (platform-aware) */}
+        {isShopify ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="size-4" />
+                Shopify Credentials
+              </CardTitle>
+              <CardDescription>
+                Dev Dashboard auth — Client ID + Client Secret from your
+                Shopify custom app.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <InfoRow label="Store URL" value={blog.shopifyStoreUrl} />
+              <InfoRow label="Client ID" value={blog.shopifyClientId} />
+              <CredentialDisplay
+                label="Client Secret"
+                value={blog.shopifyClientSecret}
+              />
+              <InfoRow label="API Version" value={blog.shopifyApiVersion} />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="size-4" />
+                WordPress Credentials
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <CredentialDisplay label="Username" value={blog.wpUsername} />
+              <CredentialDisplay label="Application Password" value={blog.wpAppPassword} />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Hosting */}
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Server className="size-4" />
@@ -198,39 +274,8 @@ export default async function BlogDetailPage({
             <InfoRow label="Login URL" value={blog.hostingLoginUrl} />
             <CredentialDisplay label="Username" value={blog.hostingUsername} />
             <CredentialDisplay label="Password" value={blog.hostingPassword} />
-            <InfoRow label="Expiry Date" value={blog.hostingExpiryDate} />
           </CardContent>
-        </Card>
-
-        {/* Registrar */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="size-4" />
-              Domain Registrar
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <InfoRow label="Registrar" value={blog.registrar} />
-            <InfoRow label="Login URL" value={blog.registrarLoginUrl} />
-            <CredentialDisplay label="Username" value={blog.registrarUsername} />
-            <CredentialDisplay label="Password" value={blog.registrarPassword} />
-            <InfoRow label="Domain Expiry" value={blog.domainExpiryDate} />
-          </CardContent>
-        </Card>
-
-        {/* SSL */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-4" />
-              SSL Certificate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <InfoRow label="SSL Expiry Date" value={blog.sslExpiryDate} />
-          </CardContent>
-        </Card>
+        </Card> */}
 
         {/* Posting Config */}
         <Card>
@@ -295,7 +340,12 @@ export default async function BlogDetailPage({
             )}
           </CardContent>
         </Card>
+
+        {/* Style profile (peptide blogs only) */}
+        {styleProfile && <StyleProfilePanel profile={styleProfile} />}
       </div>
+
+     
     </div>
   );
 }

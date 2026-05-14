@@ -4,7 +4,11 @@
 // The HTML source is our own Claude API output (trusted), but we
 // sanitize as defense-in-depth. DOMPurify is the industry-standard
 // HTML sanitizer recommended by OWASP.
-import DOMPurify from "dompurify";
+//
+// `isomorphic-dompurify` wraps the browser DOMPurify on the client and a
+// JSDOM-backed instance on the server, so this component renders correctly
+// during SSR (Next still SSRs `use client` components for the initial HTML).
+import DOMPurify from "isomorphic-dompurify";
 
 export function ReportHtmlContent({ html }: { html: string }) {
   const sanitized = DOMPurify.sanitize(html, {

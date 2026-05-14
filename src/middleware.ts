@@ -36,6 +36,7 @@ export default withAuth(
         if (
           pathname.startsWith("/login") ||
           pathname.startsWith("/magic-link") ||
+          pathname.startsWith("/auth/verify") ||
           pathname.startsWith("/verify") ||
           pathname.startsWith("/api/auth") ||
           pathname.startsWith("/api/cron")
@@ -51,6 +52,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|logo.svg).*)",
+    "/((?!_next/static|_next/image|favicon.ico|logo.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|woff|woff2|ttf|otf|css|js|map)$).*)",
   ],
 };

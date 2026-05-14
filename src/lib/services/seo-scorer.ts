@@ -93,13 +93,17 @@ function scorePage(page: CrawlPageResult): PageScore {
 
 function scoreMetaCategory(page: CrawlPageResult): number {
   let score = 100;
-  const m = page.meta;
+  const m = page.meta ?? ({} as Partial<CrawlPageResult["meta"]>);
 
   if (!m.title) score -= 25;
-  else if (m.titleLength < 30 || m.titleLength > 60) score -= 10;
+  else if ((m.titleLength ?? 0) < 30 || (m.titleLength ?? 0) > 60) score -= 10;
 
   if (!m.metaDescription) score -= 25;
-  else if (m.metaDescriptionLength < 120 || m.metaDescriptionLength > 160) score -= 10;
+  else if (
+    (m.metaDescriptionLength ?? 0) < 120 ||
+    (m.metaDescriptionLength ?? 0) > 160
+  )
+    score -= 10;
 
   if (!m.hasCanonical) score -= 15;
   if (!m.hasOgTitle) score -= 10;
@@ -111,53 +115,63 @@ function scoreMetaCategory(page: CrawlPageResult): number {
 
 function scoreContentCategory(page: CrawlPageResult): number {
   let score = 100;
-  const c = page.content;
+  const c = page.content ?? ({} as Partial<CrawlPageResult["content"]>);
+  const headings = c.headings ?? [];
 
-  if (c.h1Count === 0) score -= 30;
-  else if (c.h1Count > 1) score -= 15;
+  if ((c.h1Count ?? 0) === 0) score -= 30;
+  else if ((c.h1Count ?? 0) > 1) score -= 15;
 
   if (!c.headingHierarchyValid) score -= 15;
-  if (c.wordCount < 300) score -= 25;
-  else if (c.wordCount < 600) score -= 10;
+  if ((c.wordCount ?? 0) < 300) score -= 25;
+  else if ((c.wordCount ?? 0) < 600) score -= 10;
 
-  if (c.headings.length < 3) score -= 10;
+  if (headings.length < 3) score -= 10;
 
   return Math.max(0, score);
 }
 
 function scoreTechnicalCategory(page: CrawlPageResult): number {
   let score = 100;
-  const t = page.technical;
+  const t = page.technical ?? ({} as Partial<CrawlPageResult["technical"]>);
+  const loadTimeMs = page.loadTimeMs ?? 0;
 
   if (!t.hasViewportMeta) score -= 30;
   if (t.hasMixedContent) score -= 25;
   if (!t.hasStructuredData) score -= 20;
-  if (page.loadTimeMs > 3000) score -= 15;
-  else if (page.loadTimeMs > 2000) score -= 5;
+  if (loadTimeMs > 3000) score -= 15;
+  else if (loadTimeMs > 2000) score -= 5;
 
   return Math.max(0, score);
 }
 
 function scoreLinksCategory(page: CrawlPageResult): number {
   let score = 100;
-  const l = page.links;
+  const l = page.links ?? ({} as Partial<CrawlPageResult["links"]>);
+  const internalLinks = l.internalLinks ?? 0;
+  const brokenLinks = l.brokenLinks ?? [];
 
-  if (l.internalLinks === 0) score -= 40;
-  else if (l.internalLinks < 3) score -= 20;
+  if (internalLinks === 0) score -= 40;
+  else if (internalLinks < 3) score -= 20;
 
-  if (l.brokenLinks.length > 0) score -= 10 * Math.min(l.brokenLinks.length, 5);
+  if (brokenLinks.length > 0) score -= 10 * Math.min(brokenLinks.length, 5);
 
   return Math.max(0, score);
 }
 
 function scoreImagesCategory(page: CrawlPageResult): number {
-  if (page.images.totalImages === 0) return 80; // No images, minor penalty
+  const images = page.images ?? ({} as Partial<CrawlPageResult["images"]>);
+  const totalImages = images.totalImages ?? 0;
 
-  const altRatio = page.images.imagesWithAlt / page.images.totalImages;
+  if (totalImages === 0) return 80; // No images, minor penalty
+
+  const imagesWithAlt = images.imagesWithAlt ?? 0;
+  const largImages = images.largImages ?? [];
+
+  const altRatio = imagesWithAlt / totalImages;
   let score = Math.round(altRatio * 100);
 
-  if (page.images.largImages.length > 0) {
-    score -= 5 * Math.min(page.images.largImages.length, 5);
+  if (largImages.length > 0) {
+    score -= 5 * Math.min(largImages.length, 5);
   }
 
   return Math.max(0, score);
@@ -168,7 +182,7 @@ function extractIssues(page: CrawlPageResult): ScoredIssue[] {
   const url = page.url;
 
   // Meta issues
-  for (const issue of page.meta.issues) {
+  for (const issue of page.meta?.issues ?? []) {
     issues.push({
       pageUrl: url,
       category: "meta",
@@ -180,7 +194,7 @@ function extractIssues(page: CrawlPageResult): ScoredIssue[] {
   }
 
   // Content issues
-  for (const issue of page.content.issues) {
+  for (const issue of page.content?.issues ?? []) {
     issues.push({
       pageUrl: url,
       category: "content",
@@ -192,7 +206,7 @@ function extractIssues(page: CrawlPageResult): ScoredIssue[] {
   }
 
   // Technical issues
-  for (const issue of page.technical.issues) {
+  for (const issue of page.technical?.issues ?? []) {
     issues.push({
       pageUrl: url,
       category: "technical",
@@ -204,7 +218,7 @@ function extractIssues(page: CrawlPageResult): ScoredIssue[] {
   }
 
   // Link issues
-  for (const issue of page.links.issues) {
+  for (const issue of page.links?.issues ?? []) {
     issues.push({
       pageUrl: url,
       category: "links",
@@ -216,7 +230,7 @@ function extractIssues(page: CrawlPageResult): ScoredIssue[] {
   }
 
   // Image issues
-  for (const issue of page.images.issues) {
+  for (const issue of page.images?.issues ?? []) {
     issues.push({
       pageUrl: url,
       category: "images",

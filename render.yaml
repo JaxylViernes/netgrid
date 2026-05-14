@@ -22,8 +22,6 @@ services:
         value: "06:00"
       - key: POST_CHECK_INTERVAL_HOURS
         value: "6"
-      - key: REMINDER_SCHEDULE_DAYS
-        value: "1,7,14,30"
       - key: DATABASE_URL
         sync: false
       - key: NEXTAUTH_URL
@@ -65,23 +63,6 @@ services:
         sync: false
 
   - type: cron
-    name: netgrid-cron-renewal-check
-    runtime: docker
-    schedule: "0 3 * * *"
-    dockerfilePath: ./cron/Dockerfile
-    dockerContext: ./cron
-    envVars:
-      - key: CRON_PATH
-        value: /api/cron/renewal-check
-      - key: APP_URL
-        fromService:
-          type: web
-          name: netgrid
-          property: host
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
     name: netgrid-cron-post-verification
     runtime: docker
     schedule: "0 */6 * * *"
@@ -99,23 +80,6 @@ services:
         sync: false
 
   - type: cron
-    name: netgrid-cron-invoice-reminders
-    runtime: docker
-    schedule: "0 8 * * *"
-    dockerfilePath: ./cron/Dockerfile
-    dockerContext: ./cron
-    envVars:
-      - key: CRON_PATH
-        value: /api/cron/invoice-reminders
-      - key: APP_URL
-        fromService:
-          type: web
-          name: netgrid
-          property: host
-      - key: CRON_SECRET
-        sync: false
-
-  - type: cron
     name: netgrid-cron-monthly-reports
     runtime: docker
     schedule: "0 1 1 * *"
@@ -124,6 +88,28 @@ services:
     envVars:
       - key: CRON_PATH
         value: /api/cron/monthly-reports
+      - key: APP_URL
+        fromService:
+          type: web
+          name: netgrid
+          property: host
+      - key: CRON_SECRET
+        sync: false
+
+  # Auto-publish: generate + publish posts for every active blog whose cadence
+  # window has opened (postsPerDay + postingIntervalHours, or the legacy
+  # postingFrequencyDays). Stops per-client when clients.totalBlogsTarget posts
+  # have shipped. Runs hourly so sub-day cadences (e.g. 2x/day, every 6h) fire
+  # on time.
+  - type: cron
+    name: netgrid-cron-auto-publish
+    runtime: docker
+    schedule: "0 */6 * * *"  
+    dockerfilePath: ./cron/Dockerfile
+    dockerContext: ./cron
+    envVars:
+      - key: CRON_PATH
+        value: /api/cron/auto-publish
       - key: APP_URL
         fromService:
           type: web

@@ -19,21 +19,30 @@ import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["super_admin", "admin", "client"]);
 export const clientStatusEnum = pgEnum("client_status", ["onboarding", "active", "paused", "churned"]);
-export const billingTypeEnum = pgEnum("billing_type", ["one_time", "monthly", "yearly"]);
-export const billingStatusEnum = pgEnum("billing_status", ["active", "overdue", "paused", "cancelled"]);
 export const blogStatusEnum = pgEnum("blog_status", ["active", "paused", "setup", "decommissioned"]);
 export const seoPluginEnum = pgEnum("seo_plugin", ["yoast", "rankmath", "none"]);
+export const platformEnum = pgEnum("platform", ["wordpress", "shopify"]);
+export const shopifyAuthModeEnum = pgEnum("shopify_auth_mode", [
+  "legacy_token",
+  "client_credentials",
+]);
 export const seoCategoryEnum = pgEnum("seo_category", ["meta", "content", "technical", "links", "images", "schema", "performance"]);
 export const issueSeverityEnum = pgEnum("issue_severity", ["critical", "warning", "notice"]);
 export const issueStatusEnum = pgEnum("issue_status", ["detected", "queued", "approved", "applied", "verified", "dismissed", "failed"]);
-export const renewalTypeEnum = pgEnum("renewal_type", ["domain", "hosting", "ssl"]);
-export const alertLevelEnum = pgEnum("alert_level", ["info", "warning", "urgent", "overdue"]);
 export const senderRoleEnum = pgEnum("sender_role", ["admin", "client", "system"]);
 export const seoTrendEnum = pgEnum("seo_trend", ["improving", "stable", "declining"]);
-export const invoiceTypeEnum = pgEnum("invoice_type", ["setup", "recurring", "custom"]);
-export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "overdue", "cancelled"]);
 export const checkTypeEnum = pgEnum("check_type", ["scheduled", "manual"]);
 export const thirdPartySourceEnum = pgEnum("third_party_source", ["ahrefs", "semrush", "moz"]);
+export const generatedPostStatusEnum = pgEnum("generated_post_status", ["pending", "generating", "generated", "publishing", "published", "failed"]);
+export const scrubberStrictnessEnum = pgEnum("scrubber_strictness", ["loose", "standard", "strict"]);
+export const compliancePlacementEnum = pgEnum("compliance_placement", [
+  "TOP",
+  "BOTTOM",
+  "TOP_AND_BOTTOM",
+  "INLINE",
+  "ABOUT_ONLY",
+  "ROTATING",
+]);
 
 // ─── 1. users ────────────────────────────────────────────────────────────────
 
@@ -63,20 +72,12 @@ export const clients = pgTable("clients", {
   contactPhone: varchar("contact_phone", { length: 50 }),
   niche: varchar("niche", { length: 255 }),
   totalBlogsTarget: integer("total_blogs_target").default(0),
-  billingType: billingTypeEnum("billing_type").default("monthly"),
-  billingAmount: decimal("billing_amount", { precision: 10, scale: 2 }).default("0"),
-  setupFee: decimal("setup_fee", { precision: 10, scale: 2 }).default("0"),
-  setupFeePaid: boolean("setup_fee_paid").default(false),
-  billingStartDate: date("billing_start_date"),
-  nextBillingDate: date("next_billing_date"),
-  billingStatus: billingStatusEnum("billing_status").default("active"),
   notesInternal: text("notes_internal"),
   status: clientStatusEnum("status").default("onboarding"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("clients_status_idx").on(table.status),
-  index("clients_billing_status_idx").on(table.billingStatus),
 ]);
 
 // ─── 3. blogs ────────────────────────────────────────────────────────────────
@@ -85,10 +86,23 @@ export const blogs = pgTable("blogs", {
   id: uuid("id").defaultRandom().primaryKey(),
   clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
   domain: varchar("domain", { length: 255 }).notNull(),
+  platform: platformEnum("platform").default("wordpress").notNull(),
   wpUrl: varchar("wp_url", { length: 500 }),
   wpUsername: varchar("wp_username", { length: 255 }),
   wpAppPassword: varchar("wp_app_password", { length: 255 }),
   seoPlugin: seoPluginEnum("seo_plugin").default("none"),
+  shopifyStoreUrl: varchar("shopify_store_url", { length: 500 }),
+  shopifyAdminApiToken: varchar("shopify_admin_api_token", { length: 500 }),
+  shopifyApiVersion: varchar("shopify_api_version", { length: 20 }).default("2024-07"),
+  shopifyBlogId: varchar("shopify_blog_id", { length: 50 }),
+
+  // Shopify auth & metadata
+  shopifyAuthMode: shopifyAuthModeEnum("shopify_auth_mode").default("client_credentials"),
+  shopifyClientId: varchar("shopify_client_id", { length: 255 }),
+  shopifyClientSecret: varchar("shopify_client_secret", { length: 500 }),
+  shopifyBlogHandle: varchar("shopify_blog_handle", { length: 255 }),
+  shopifyGrantedScopes: text("shopify_granted_scopes"),
+
   hostingProvider: varchar("hosting_provider", { length: 255 }),
   hostingLoginUrl: varchar("hosting_login_url", { length: 500 }),
   hostingUsername: varchar("hosting_username", { length: 255 }),
@@ -97,11 +111,15 @@ export const blogs = pgTable("blogs", {
   registrarLoginUrl: varchar("registrar_login_url", { length: 500 }),
   registrarUsername: varchar("registrar_username", { length: 255 }),
   registrarPassword: varchar("registrar_password", { length: 255 }),
-  domainExpiryDate: date("domain_expiry_date"),
-  hostingExpiryDate: date("hosting_expiry_date"),
-  sslExpiryDate: date("ssl_expiry_date"),
   postingFrequency: varchar("posting_frequency", { length: 50 }),
-  postingFrequencyDays: integer("posting_frequency_days"),
+  postingFrequencyDays: integer("posting_frequency_days").array(),
+  // Sub-day cadence. Daily quota (e.g. 2 = max 2 posts per UTC day). Takes
+  // precedence over postingFrequencyDays when set.
+  postsPerDay: integer("posts_per_day"),
+  // Minimum hours between consecutive posts on this blog. e.g. with
+  // postsPerDay=2 and postingIntervalHours=6: post #1 at T+0, post #2 at T+6h,
+  // then wait for the next UTC day.
+  postingIntervalHours: integer("posting_interval_hours"),
   lastPostVerifiedAt: timestamp("last_post_verified_at"),
   lastPostTitle: varchar("last_post_title", { length: 500 }),
   currentSeoScore: integer("current_seo_score"),
@@ -193,27 +211,6 @@ export const postVerifications = pgTable("post_verifications", {
   index("post_verifications_client_id_idx").on(table.clientId),
 ]);
 
-// ─── 7. renewal_alerts ──────────────────────────────────────────────────────
-
-export const renewalAlerts = pgTable("renewal_alerts", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  blogId: uuid("blog_id").notNull().references(() => blogs.id, { onDelete: "cascade" }),
-  clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
-  renewalType: renewalTypeEnum("renewal_type").notNull(),
-  expiryDate: date("expiry_date").notNull(),
-  daysUntilExpiry: integer("days_until_expiry"),
-  alertLevel: alertLevelEnum("alert_level").default("info"),
-  acknowledged: boolean("acknowledged").default(false),
-  renewed: boolean("renewed").default(false),
-  renewedUntil: date("renewed_until"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("renewal_alerts_blog_id_idx").on(table.blogId),
-  index("renewal_alerts_client_id_idx").on(table.clientId),
-  index("renewal_alerts_alert_level_idx").on(table.alertLevel),
-]);
-
 // ─── 8. messages ─────────────────────────────────────────────────────────────
 
 export const messages = pgTable("messages", {
@@ -257,30 +254,6 @@ export const reports = pgTable("reports", {
   index("reports_client_id_idx").on(table.clientId),
 ]);
 
-// ─── 10. invoices ────────────────────────────────────────────────────────────
-
-export const invoices = pgTable("invoices", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
-  invoiceNumber: varchar("invoice_number", { length: 50 }).notNull().unique(),
-  type: invoiceTypeEnum("type").default("recurring"),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  currency: varchar("currency", { length: 3 }).default("CAD"),
-  description: text("description"),
-  dueDate: date("due_date").notNull(),
-  status: invoiceStatusEnum("status").default("draft"),
-  paidAt: timestamp("paid_at"),
-  paidMethod: varchar("paid_method", { length: 100 }),
-  reminderSentAt: timestamp("reminder_sent_at"),
-  remindersCount: integer("reminders_count").default(0),
-  notesInternal: text("notes_internal"),
-  visibleToClient: boolean("visible_to_client").default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("invoices_client_id_idx").on(table.clientId),
-  index("invoices_status_idx").on(table.status),
-]);
-
 // ─── 11. seo_third_party_data ───────────────────────────────────────────────
 
 export const seoThirdPartyData = pgTable("seo_third_party_data", {
@@ -299,6 +272,99 @@ export const seoThirdPartyData = pgTable("seo_third_party_data", {
 }, (table) => [
   index("seo_third_party_blog_id_idx").on(table.blogId),
   index("seo_third_party_client_id_idx").on(table.clientId),
+]);
+
+// ─── generated_posts ────────────────────────────────────────────────────────
+
+export const generatedPosts = pgTable("generated_posts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  blogId: uuid("blog_id").notNull().references(() => blogs.id, { onDelete: "cascade" }),
+  clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  topic: varchar("topic", { length: 500 }).notNull(),
+  keywords: jsonb("keywords"),
+  title: varchar("title", { length: 500 }),
+  body: text("body"),
+  excerpt: text("excerpt"),
+  metaTitle: varchar("meta_title", { length: 255 }),
+  metaDescription: text("meta_description"),
+  featuredImageUrl: text("featured_image_url"),
+  wordCount: integer("word_count"),
+  seoScore: integer("seo_score"),
+  readabilityScore: integer("readability_score"),
+  brandVoiceScore: integer("brand_voice_score"),
+  tokensUsed: integer("tokens_used"),
+  costUsd: decimal("cost_usd", { precision: 10, scale: 6 }),
+  status: generatedPostStatusEnum("status").default("pending").notNull(),
+  failureReason: text("failure_reason"),
+  externalPostId: varchar("external_post_id", { length: 100 }),
+  externalPostUrl: varchar("external_post_url", { length: 1000 }),
+  isAutoGenerated: boolean("is_auto_generated").default(false),
+  // Scrubber audit trail. Shape mirrors ScrubberReport in
+  // src/lib/content/scrubber/types.ts; jsonb so we can GROUP BY violation
+  // kinds without locking the report shape in DDL.
+  scrubberReport: jsonb("scrubber_report"),
+  flaggedForReview: boolean("flagged_for_review").default(false).notNull(),
+  generatedAt: timestamp("generated_at"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("generated_posts_blog_id_idx").on(table.blogId),
+  index("generated_posts_client_id_idx").on(table.clientId),
+  index("generated_posts_status_idx").on(table.status),
+  index("generated_posts_created_at_idx").on(table.createdAt),
+]);
+
+// ─── style_profiles ─────────────────────────────────────────────────────────
+// One per blog. Built by the 14-phase assignment algorithm at blog creation.
+// Locked after assignment — never re-rolled automatically. Field IDs reference
+// the library files in src/lib/content/libraries/*.
+
+export const styleProfiles = pgTable("style_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  blogId: uuid("blog_id")
+    .notNull()
+    .references(() => blogs.id, { onDelete: "cascade" })
+    .unique(),
+  // Future-proofing for non-peptide expansions. Currently always "peptides".
+  nicheKey: varchar("niche_key", { length: 64 }).notNull().default("peptides"),
+
+  // Locked stylistic core (referencing the libraries by integer ID)
+  subNicheId: integer("sub_niche_id").notNull(),
+  voiceId: integer("voice_id").notNull(),
+  skeletonId: integer("skeleton_id").notNull(),
+  cadenceId: integer("cadence_id").notNull(),
+  quirks: integer("quirks").array().notNull(),
+  schemaId: integer("schema_id").notNull(),
+  tagSetId: integer("tag_set_id").notNull(),
+  citationStyleId: integer("citation_style_id").notNull(),
+
+  // Per-post draws
+  structuralPool: integer("structural_pool").array().notNull(),
+
+  // Compliance
+  compliancePhraseIds: integer("compliance_phrase_ids").array().notNull(),
+  compliancePlacement: compliancePlacementEnum("compliance_placement").notNull(),
+
+  // Operational
+  wordBandMin: integer("word_band_min").notNull(),
+  wordBandMax: integer("word_band_max").notNull(),
+  scrubberStrictness: scrubberStrictnessEnum("scrubber_strictness")
+    .notNull()
+    .default("standard"),
+
+  // Niche content
+  primaryCompounds: text("primary_compounds").array().notNull(),
+  secondaryCompounds: text("secondary_compounds").array().notNull(),
+
+  // Audit
+  assignmentSeed: varchar("assignment_seed", { length: 64 }),
+  minHammingAtAssign: integer("min_hamming_at_assign"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("style_profiles_blog_id_idx").on(table.blogId),
+  index("style_profiles_sub_niche_idx").on(table.subNicheId),
+  index("style_profiles_voice_idx").on(table.voiceId),
 ]);
 
 // ─── 12. activity_log ───────────────────────────────────────────────────────
@@ -329,7 +395,6 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   users: many(users),
   messages: many(messages),
   reports: many(reports),
-  invoices: many(invoices),
   activityLogs: many(activityLog),
 }));
 
@@ -338,8 +403,21 @@ export const blogsRelations = relations(blogs, ({ one, many }) => ({
   seoScans: many(seoScans),
   seoIssues: many(seoIssues),
   postVerifications: many(postVerifications),
-  renewalAlerts: many(renewalAlerts),
   thirdPartyData: many(seoThirdPartyData),
+  generatedPosts: many(generatedPosts),
+  styleProfile: one(styleProfiles, {
+    fields: [blogs.id],
+    references: [styleProfiles.blogId],
+  }),
+}));
+
+export const styleProfilesRelations = relations(styleProfiles, ({ one }) => ({
+  blog: one(blogs, { fields: [styleProfiles.blogId], references: [blogs.id] }),
+}));
+
+export const generatedPostsRelations = relations(generatedPosts, ({ one }) => ({
+  blog: one(blogs, { fields: [generatedPosts.blogId], references: [blogs.id] }),
+  client: one(clients, { fields: [generatedPosts.clientId], references: [clients.id] }),
 }));
 
 export const seoScansRelations = relations(seoScans, ({ one, many }) => ({
@@ -360,11 +438,6 @@ export const postVerificationsRelations = relations(postVerifications, ({ one })
   client: one(clients, { fields: [postVerifications.clientId], references: [clients.id] }),
 }));
 
-export const renewalAlertsRelations = relations(renewalAlerts, ({ one }) => ({
-  blog: one(blogs, { fields: [renewalAlerts.blogId], references: [blogs.id] }),
-  client: one(clients, { fields: [renewalAlerts.clientId], references: [clients.id] }),
-}));
-
 export const messagesRelations = relations(messages, ({ one }) => ({
   client: one(clients, { fields: [messages.clientId], references: [clients.id] }),
   sender: one(users, { fields: [messages.senderId], references: [users.id] }),
@@ -372,10 +445,6 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 
 export const reportsRelations = relations(reports, ({ one }) => ({
   client: one(clients, { fields: [reports.clientId], references: [clients.id] }),
-}));
-
-export const invoicesRelations = relations(invoices, ({ one }) => ({
-  client: one(clients, { fields: [invoices.clientId], references: [clients.id] }),
 }));
 
 export const seoThirdPartyDataRelations = relations(seoThirdPartyData, ({ one }) => ({

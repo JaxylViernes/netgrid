@@ -30,8 +30,6 @@ interface ClientRow {
   contactEmail: string | null;
   niche: string | null;
   status: "onboarding" | "active" | "paused" | "churned" | null;
-  billingStatus: "active" | "overdue" | "paused" | "cancelled" | null;
-  billingAmount: string | null;
   totalBlogsTarget: number | null;
   createdAt: Date;
 }
@@ -48,13 +46,6 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
   onboarding: "secondary",
   paused: "outline",
   churned: "destructive",
-};
-
-const billingStatusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  active: "default",
-  overdue: "destructive",
-  paused: "outline",
-  cancelled: "destructive",
 };
 
 export function ClientTable({ clients, total, page, pageSize }: ClientTableProps) {
@@ -98,7 +89,6 @@ export function ClientTable({ clients, total, page, pageSize }: ClientTableProps
               <TableHead>Niche</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Blogs</TableHead>
-              <TableHead>Billing</TableHead>
               <TableHead className="w-[60px]">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -127,11 +117,6 @@ export function ClientTable({ clients, total, page, pageSize }: ClientTableProps
                   </Badge>
                 </TableCell>
                 <TableCell>{client.totalBlogsTarget ?? 0}</TableCell>
-                <TableCell>
-                  <Badge variant={client.billingStatus ? billingStatusVariant[client.billingStatus] ?? "secondary" : "secondary"}>
-                    {client.billingStatus}
-                  </Badge>
-                </TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

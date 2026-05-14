@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3005",
+    "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first next dev -p 3005",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:seed": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first tsx src/lib/db/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
@@ -44,7 +47,7 @@
     "date-fns": "^4.1.0",
     "dompurify": "^3.3.3",
     "drizzle-orm": "^0.45.2",
-    "lucide-react": "^1.8.0",
+    "lucide-react": "0.460.0",
     "nanoid": "^5.1.7",
     "next": "^14.2.35",
     "next-auth": "^4.24.13",
@@ -67,6 +70,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",

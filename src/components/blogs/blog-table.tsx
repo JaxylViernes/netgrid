@@ -68,6 +68,7 @@ interface BlogTableProps {
   totalPages: number;
   clientId?: string;
   showClientColumn?: boolean;
+  rowTarget?: "detail" | "posts";
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ export function BlogTable({
   totalPages,
   clientId,
   showClientColumn = true,
+  rowTarget = "detail",
 }: BlogTableProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -262,7 +264,7 @@ export function BlogTable({
                 <TableRow
                   key={blog.id}
                   className="cursor-pointer"
-                  onClick={() => router.push(`/blogs/${blog.id}`)}
+                  onClick={() => router.push( rowTarget === "posts" ? `/blogs/${blog.id}/posts` : `/blogs/${blog.id}`)}
                 >
                   <TableCell className="font-medium">{blog.domain}</TableCell>
                   {showClientColumn && (
@@ -301,11 +303,11 @@ export function BlogTable({
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/blogs/${blog.id}`);
+                            router.push(rowTarget === "posts" ? `/blogs/${blog.id}/posts` : `/blogs/${blog.id}`);
                           }}
                         >
                           <ExternalLink className="size-4" />
-                          View Details
+                          {rowTarget === "posts" ? "View Posts" : "View Details"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => {

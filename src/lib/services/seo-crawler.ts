@@ -262,24 +262,28 @@ export async function crawlBlog(wpUrl: string, maxPages: number = CRAWLER_DEFAUL
     }
   } catch { /* sitemap not available, crawl from homepage */ }
 
-  // Also try wp-sitemap.xml (WordPress default)
+  // Try other common sitemap paths if the Yoast one didn't yield URLs:
+  //   /sitemap.xml      — Shopify, Webflow, most static sites
+  //   /wp-sitemap.xml   — WordPress 5.5+ core (no SEO plugin)
   if (queue.length <= 1) {
-    try {
-      const wpSitemapUrl = new URL("/wp-sitemap.xml", wpUrl).toString();
-      const res = await axios.get(wpSitemapUrl, {
-        timeout: 5000,
-        headers: { "User-Agent": CRAWLER_DEFAULTS.userAgent },
-        validateStatus: () => true,
-      });
-      if (res.status === 200) {
-        const $s = cheerio.load(res.data, { xml: true });
-        // Get sub-sitemaps
-        $s("loc").each((_, el) => {
-          const loc = $s(el).text().trim();
-          if (loc) queue.push(loc);
+    for (const path of ["/sitemap.xml", "/wp-sitemap.xml"]) {
+      try {
+        const sitemapUrl = new URL(path, wpUrl).toString();
+        const res = await axios.get(sitemapUrl, {
+          timeout: 5000,
+          headers: { "User-Agent": CRAWLER_DEFAULTS.userAgent },
+          validateStatus: () => true,
         });
-      }
-    } catch { /* ignore */ }
+        if (res.status === 200) {
+          const $s = cheerio.load(res.data, { xml: true });
+          $s("loc").each((_, el) => {
+            const loc = $s(el).text().trim();
+            if (loc && !crawled.has(loc)) queue.push(loc);
+          });
+          if (queue.length > 1) break; // First sitemap that yielded URLs wins
+        }
+      } catch { /* try next candidate */ }
+    }
   }
 
   for (const url of queue) {

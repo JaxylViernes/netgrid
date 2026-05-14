@@ -1,11 +1,15 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormRegister, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { createBlogSchema, type CreateBlogInput } from "@/lib/validators/blog";
-import { createBlog, updateBlog } from "@/lib/actions/blog-actions";
+import {
+  createBlog,
+  updateBlog,
+  testShopifyConnection,
+} from "@/lib/actions/blog-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,10 +29,8 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ClientOption {
   id: string;
@@ -43,7 +45,76 @@ interface BlogFormProps {
   defaultClientId?: string;
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+type TestResult =
+  | { kind: "idle" }
+  | { kind: "testing" }
+  | { kind: "ok"; message: string }
+  | { kind: "err"; message: string };
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+// ISO weekday: 1 = Monday … 7 = Sunday
+const DAYS_OF_WEEK = [
+  { value: 1, label: "Mon", full: "Monday" },
+  { value: 2, label: "Tue", full: "Tuesday" },
+  { value: 3, label: "Wed", full: "Wednesday" },
+  { value: 4, label: "Thu", full: "Thursday" },
+  { value: 5, label: "Fri", full: "Friday" },
+  { value: 6, label: "Sat", full: "Saturday" },
+  { value: 7, label: "Sun", full: "Sunday" },
+] as const;
+
+// ─── Field (outside component to avoid remounting on every keystroke) ───────
+
+interface FieldProps {
+  label: string;
+  name: Path<CreateBlogInput>;
+  type?: string;
+  placeholder?: string;
+  register: UseFormRegister<CreateBlogInput>;
+  errors: FieldErrors<CreateBlogInput>;
+  valueAsNumber?: boolean;
+}
+
+function Field({
+  label,
+  name,
+  type = "text",
+  placeholder,
+  register,
+  errors,
+  valueAsNumber,
+}: FieldProps) {
+  const error = errors[name];
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={name}>{label}</Label>
+      <Input
+        id={name}
+        type={type}
+        placeholder={placeholder}
+        {...register(name, valueAsNumber ? { valueAsNumber: true } : {})}
+      />
+      {error && (
+        <p className="text-xs text-destructive">{error.message as string}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function normalizeShopifyStoreUrl(raw: string): string {
+  if (!raw) return raw;
+  let s = raw.trim().toLowerCase();
+  s = s.replace(/^https?:\/\//, "").replace(/\/$/, "").split("/")[0];
+  if (!s.includes(".") && s.length > 0) {
+    s = `${s}.myshopify.com`;
+  }
+  return s;
+}
+
+// ─── BlogForm ───────────────────────────────────────────────────────────────
 
 export function BlogForm({
   mode,
@@ -54,30 +125,41 @@ export function BlogForm({
 }: BlogFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [testResult, setTestResult] = useState<TestResult>({ kind: "idle" });
 
-  const form = useForm({
+  // Coerce existing posting days into a clean array. Handles the migration
+  // case where some rows may still come through as a single number.
+  const initialPostingDays: number[] = Array.isArray(
+    defaultValues?.postingFrequencyDays,
+  )
+    ? (defaultValues!.postingFrequencyDays as number[])
+    : typeof defaultValues?.postingFrequencyDays === "number"
+      ? [defaultValues.postingFrequencyDays as number]
+      : [];
+
+  const form = useForm<CreateBlogInput>({
     resolver: zodResolver(createBlogSchema),
     defaultValues: {
       clientId: defaultClientId || defaultValues?.clientId || "",
       domain: defaultValues?.domain || "",
+      platform: defaultValues?.platform || "wordpress",
       wpUrl: defaultValues?.wpUrl || "",
       wpUsername: defaultValues?.wpUsername || "",
       wpAppPassword: defaultValues?.wpAppPassword || "",
       seoPlugin: defaultValues?.seoPlugin || "none",
-      hostingProvider: defaultValues?.hostingProvider || "",
-      hostingLoginUrl: defaultValues?.hostingLoginUrl || "",
-      hostingUsername: defaultValues?.hostingUsername || "",
-      hostingPassword: defaultValues?.hostingPassword || "",
-      registrar: defaultValues?.registrar || "",
-      registrarLoginUrl: defaultValues?.registrarLoginUrl || "",
-      registrarUsername: defaultValues?.registrarUsername || "",
-      registrarPassword: defaultValues?.registrarPassword || "",
-      domainExpiryDate: defaultValues?.domainExpiryDate || "",
-      hostingExpiryDate: defaultValues?.hostingExpiryDate || "",
-      sslExpiryDate: defaultValues?.sslExpiryDate || "",
-      postingFrequency: defaultValues?.postingFrequency || "",
-      postingFrequencyDays: defaultValues?.postingFrequencyDays ?? undefined,
-      status: defaultValues?.status || "setup",
+      shopifyAuthMode: "client_credentials" as const,
+      // shopifyAdminApiToken intentionally hidden from the UI — Dev Dashboard
+      // (client_credentials) is the only supported mode for new blogs.
+      shopifyStoreUrl: defaultValues?.shopifyStoreUrl || "",
+      shopifyAdminApiToken: defaultValues?.shopifyAdminApiToken || "",
+      shopifyClientId: defaultValues?.shopifyClientId || "",
+      shopifyClientSecret: defaultValues?.shopifyClientSecret || "",
+      shopifyApiVersion: defaultValues?.shopifyApiVersion || "2024-07",
+      shopifyBlogId: defaultValues?.shopifyBlogId || "",
+      // Frequency is hardcoded to "weekly" — the picker now drives the schedule
+      postingFrequency: "weekly",
+      postingFrequencyDays: initialPostingDays,
+      status: defaultValues?.status || "active",
       notesInternal: defaultValues?.notesInternal || "",
     },
   });
@@ -87,76 +169,142 @@ export function BlogForm({
     handleSubmit,
     setValue,
     watch,
+    getValues,
     formState: { errors },
   } = form;
 
-  const onSubmit = (data: CreateBlogInput) => {
-    startTransition(async () => {
-      let result;
-      if (mode === "create") {
-        result = await createBlog(data);
-      } else {
-        result = await updateBlog(blogId!, data);
-      }
+  const platform = watch("platform");
+  const selectedDays = (watch("postingFrequencyDays") as number[] | undefined) ?? [];
 
-      if ("error" in result) {
-        toast.error(result.error);
-        return;
-      }
+  const toggleDay = (day: number) => {
+    const current = (getValues("postingFrequencyDays") as number[] | undefined) ?? [];
+    const next = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day].sort((a, b) => a - b);
 
-      toast.success(mode === "create" ? "Blog created" : "Blog updated");
-      if (mode === "create" && "id" in result) {
-        router.push(`/blogs/${result.id}`);
-      } else {
-        router.push(`/blogs/${blogId}`);
-      }
-      router.refresh();
+    setValue("postingFrequencyDays", next as CreateBlogInput["postingFrequencyDays"], {
+      shouldValidate: true,
+      shouldDirty: true,
     });
   };
 
-  // Helper to render a field group
-  const Field = ({
-    label,
-    name,
-    type = "text",
-    placeholder,
-  }: {
-    label: string;
-    name: keyof CreateBlogInput;
-    type?: string;
-    placeholder?: string;
-  }) => (
-    <div className="space-y-1.5">
-      <Label htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        type={type}
-        placeholder={placeholder}
-        {...register(name)}
-      />
-      {errors[name] && (
-        <p className="text-xs text-destructive">
-          {errors[name]?.message as string}
-        </p>
-      )}
-    </div>
-  );
+  const onSubmit = (data: CreateBlogInput) => {
+    // Normalize Shopify store URL just before submission
+    const cleaned: CreateBlogInput = {
+      ...data,
+      shopifyStoreUrl: data.shopifyStoreUrl
+        ? normalizeShopifyStoreUrl(data.shopifyStoreUrl)
+        : data.shopifyStoreUrl,
+      // Force frequency to "weekly" — UI doesn't expose other options
+      postingFrequency: "weekly",
+    };
+
+    startTransition(async () => {
+      const toastId = toast.loading(
+        mode === "create" ? "Creating blog…" : "Saving changes…",
+      );
+
+      try {
+        const result =
+          mode === "create"
+            ? await createBlog(cleaned)
+            : await updateBlog(blogId!, cleaned);
+
+        if ("error" in result) {
+          toast.error(result.error, { id: toastId });
+          return;
+        }
+
+        toast.success(mode === "create" ? "Blog created" : "Blog updated", {
+          id: toastId,
+        });
+
+        if (mode === "create" && "id" in result) {
+          router.push(`/blogs/${result.id}`);
+        } else {
+          router.push(`/blogs/${blogId}`);
+        }
+        router.refresh();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Something went wrong",
+          { id: toastId },
+        );
+      }
+    });
+  };
+
+  const onInvalid = (errs: FieldErrors<CreateBlogInput>) => {
+    console.warn("Validation blocked submit:", errs);
+    toast.error("Please fix the highlighted fields before saving");
+  };
+
+  const handleTestShopify = async () => {
+    const v = getValues();
+    setTestResult({ kind: "testing" });
+
+    const normalized = normalizeShopifyStoreUrl(v.shopifyStoreUrl || "");
+
+    const res = await testShopifyConnection({
+      storeUrl: normalized,
+      authMode: "client_credentials",
+      clientId: v.shopifyClientId,
+      clientSecret: v.shopifyClientSecret,
+      apiVersion: v.shopifyApiVersion,
+    });
+
+    if (res.success) {
+      setValue("shopifyStoreUrl", normalized, { shouldValidate: true });
+      setTestResult({ kind: "ok", message: res.message });
+    } else {
+      setTestResult({ kind: "err", message: res.message });
+    }
+  };
+
+  const errorCount = Object.keys(errors).length;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* Identity Section */}
+    <form
+      onSubmit={handleSubmit(onSubmit, onInvalid)}
+      className="space-y-6"
+      noValidate
+    >
+      {/* Validation summary */}
+      {errorCount > 0 && (
+        <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-destructive">
+              {errorCount === 1
+                ? "1 field needs attention"
+                : `${errorCount} fields need attention`}
+            </p>
+            <ul className="list-disc pl-5 text-xs text-destructive/90">
+              {Object.entries(errors).map(([field, err]) => (
+                <li key={field}>
+                  <span className="font-mono">{field}</span>:{" "}
+                  {(err as { message?: string })?.message ?? "invalid"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Identity */}
       <Card>
         <CardHeader>
           <CardTitle>Identity</CardTitle>
           <CardDescription>Basic blog identification</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          {/* Client Selector */}
           <div className="space-y-1.5">
             <Label htmlFor="clientId">Client</Label>
             <Select
               value={watch("clientId")}
-              onValueChange={(v) => setValue("clientId", v, { shouldValidate: true })}
+              onValueChange={(v) =>
+                setValue("clientId", v, { shouldValidate: true })
+              }
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a client" />
@@ -170,20 +318,28 @@ export function BlogForm({
               </SelectContent>
             </Select>
             {errors.clientId && (
-              <p className="text-xs text-destructive">{errors.clientId.message}</p>
+              <p className="text-xs text-destructive">
+                {errors.clientId.message}
+              </p>
             )}
           </div>
 
-          <Field label="Domain" name="domain" placeholder="example.com" />
-          <Field label="WordPress URL" name="wpUrl" placeholder="https://example.com" />
+          <Field
+            label="Domain"
+            name="domain"
+            placeholder="example.com"
+            register={register}
+            errors={errors}
+          />
 
-          {/* Status Selector */}
           <div className="space-y-1.5">
             <Label htmlFor="status">Status</Label>
             <Select
               value={watch("status")}
               onValueChange={(v) =>
-                setValue("status", v as CreateBlogInput["status"], { shouldValidate: true })
+                setValue("status", v as CreateBlogInput["status"], {
+                  shouldValidate: true,
+                })
               }
             >
               <SelectTrigger className="w-full">
@@ -200,118 +356,263 @@ export function BlogForm({
         </CardContent>
       </Card>
 
-      {/* WordPress Credentials */}
+      {/* Platform */}
       <Card>
         <CardHeader>
-          <CardTitle>WordPress Credentials</CardTitle>
-          <CardDescription>REST API authentication details</CardDescription>
+          <CardTitle>Platform</CardTitle>
+          <CardDescription>
+            Choose the CMS this blog publishes to
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="WP Username" name="wpUsername" placeholder="admin" />
-          <Field
-            label="WP Application Password"
-            name="wpAppPassword"
-            type="password"
-            placeholder="xxxx xxxx xxxx xxxx"
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="seoPlugin">SEO Plugin</Label>
-            <Select
-              value={watch("seoPlugin")}
-              onValueChange={(v) =>
-                setValue("seoPlugin", v as CreateBlogInput["seoPlugin"], {
-                  shouldValidate: true,
-                })
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() =>
+                setValue("platform", "wordpress", { shouldValidate: true })
               }
+              className={`flex flex-col items-start gap-1 rounded-lg border-2 p-4 text-left transition-colors ${
+                platform === "wordpress"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select SEO plugin" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="yoast">Yoast SEO</SelectItem>
-                <SelectItem value="rankmath">Rank Math</SelectItem>
-                <SelectItem value="none">None</SelectItem>
-              </SelectContent>
-            </Select>
+              <span className="font-medium">WordPress</span>
+              <span className="text-xs text-muted-foreground">
+                Self-hosted or WP.com via REST API + Application Password
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setValue("platform", "shopify", { shouldValidate: true })
+              }
+              className={`flex flex-col items-start gap-1 rounded-lg border-2 p-4 text-left transition-colors ${
+                platform === "shopify"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+            >
+              <span className="font-medium">Shopify</span>
+              <span className="text-xs text-muted-foreground">
+                Shopify store blog via Admin API
+              </span>
+            </button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Hosting */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Hosting</CardTitle>
-          <CardDescription>Hosting provider credentials and expiry</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Hosting Provider" name="hostingProvider" placeholder="SiteGround" />
-          <Field
-            label="Login URL"
-            name="hostingLoginUrl"
-            placeholder="https://my.siteground.com"
-          />
-          <Field label="Username" name="hostingUsername" />
-          <Field label="Password" name="hostingPassword" type="password" />
-          <Field label="Hosting Expiry Date" name="hostingExpiryDate" type="date" />
-        </CardContent>
-      </Card>
+      {/* WordPress */}
+      {platform === "wordpress" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>WordPress Credentials</CardTitle>
+            <CardDescription>
+              Generate an Application Password under Users → Profile →
+              Application Passwords.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="WordPress URL"
+              name="wpUrl"
+              placeholder="https://example.com"
+              register={register}
+              errors={errors}
+            />
+            <Field
+              label="WP Username"
+              name="wpUsername"
+              placeholder="admin"
+              register={register}
+              errors={errors}
+            />
+            <Field
+              label="WP Application Password"
+              name="wpAppPassword"
+              type="password"
+              placeholder="xxxx xxxx xxxx xxxx"
+              register={register}
+              errors={errors}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="seoPlugin">SEO Plugin</Label>
+              <Select
+                value={watch("seoPlugin")}
+                onValueChange={(v) =>
+                  setValue("seoPlugin", v as CreateBlogInput["seoPlugin"], {
+                    shouldValidate: true,
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select SEO plugin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yoast">Yoast SEO</SelectItem>
+                  <SelectItem value="rankmath">Rank Math</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Domain Registrar */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Domain Registrar</CardTitle>
-          <CardDescription>Domain registration details</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Registrar" name="registrar" placeholder="Namecheap" />
-          <Field
-            label="Login URL"
-            name="registrarLoginUrl"
-            placeholder="https://ap.www.namecheap.com"
-          />
-          <Field label="Username" name="registrarUsername" />
-          <Field label="Password" name="registrarPassword" type="password" />
-          <Field label="Domain Expiry Date" name="domainExpiryDate" type="date" />
-        </CardContent>
-      </Card>
+      {/* Shopify */}
+      {platform === "shopify" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Shopify Credentials</CardTitle>
+            <CardDescription>
+              Create an app in Shopify&apos;s Dev Dashboard (Settings → Apps →
+              Develop apps → Build apps in Dev Dashboard), enable read_content
+              + write_content scopes, install it, then copy the Client ID and
+              Client Secret from app Settings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Store URL"
+                name="shopifyStoreUrl"
+                placeholder="mystore.myshopify.com"
+                register={register}
+                errors={errors}
+              />
+              <Field
+                label="Client ID"
+                name="shopifyClientId"
+                placeholder="1a2b3c4d…"
+                register={register}
+                errors={errors}
+              />
+              <Field
+                label="Client Secret"
+                name="shopifyClientSecret"
+                type="password"
+                placeholder="shpss_xxxxxxxxxxxxxxxx"
+                register={register}
+                errors={errors}
+              />
+              <Field
+                label="API Version"
+                name="shopifyApiVersion"
+                placeholder="2024-07"
+                register={register}
+                errors={errors}
+              />
+              <Field
+                label="Blog ID (optional)"
+                name="shopifyBlogId"
+                placeholder="Leave blank to use first blog"
+                register={register}
+                errors={errors}
+              />
+            </div>
 
-      {/* SSL */}
-      <Card>
-        <CardHeader>
-          <CardTitle>SSL Certificate</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Field label="SSL Expiry Date" name="sslExpiryDate" type="date" />
-        </CardContent>
-      </Card>
+            {/* Test connection */}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleTestShopify}
+                disabled={testResult.kind === "testing"}
+              >
+                {testResult.kind === "testing" && (
+                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                )}
+                Test connection
+              </Button>
+              {testResult.kind === "ok" && (
+                <span className="flex items-center gap-1.5 text-xs text-green-600">
+                  <CheckCircle2 className="size-3.5" />
+                  {testResult.message}
+                </span>
+              )}
+              {testResult.kind === "err" && (
+                <span className="flex items-center gap-1.5 text-xs text-destructive">
+                  <XCircle className="size-3.5" />
+                  {testResult.message}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Posting Config */}
       <Card>
         <CardHeader>
           <CardTitle>Posting Configuration</CardTitle>
-          <CardDescription>Expected posting schedule</CardDescription>
+          <CardDescription>
+            Weekly schedule — pick which days posts should go out.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Posting Frequency"
-            name="postingFrequency"
-            placeholder="3x per week"
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="postingFrequencyDays">Frequency (days)</Label>
-            <Input
-              id="postingFrequencyDays"
-              type="number"
-              min={1}
-              placeholder="e.g. 3"
-              {...register("postingFrequencyDays")}
-            />
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <Label>Frequency</Label>
+              <span className="text-xs text-muted-foreground">
+                Weekly (fixed)
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              All blogs run on a weekly cadence. Use the picker below to choose
+              which days of the week to publish on.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Posting Days</Label>
+            <div className="flex flex-wrap gap-2">
+              {DAYS_OF_WEEK.map((day) => {
+                const isSelected = selectedDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => toggleDay(day.value)}
+                    aria-pressed={isSelected}
+                    aria-label={day.full}
+                    className={`min-w-14 rounded-md border-2 px-3 py-2 text-sm font-medium transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background hover:border-primary/50"
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedDays.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No days selected — this blog won't be auto-scheduled.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {selectedDays.length} day{selectedDays.length === 1 ? "" : "s"}{" "}
+                selected:{" "}
+                {selectedDays
+                  .map(
+                    (d) =>
+                      DAYS_OF_WEEK.find((x) => x.value === d)?.full ?? "",
+                  )
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
             {errors.postingFrequencyDays && (
               <p className="text-xs text-destructive">
-                {errors.postingFrequencyDays.message as string}
+                {(errors.postingFrequencyDays as { message?: string })?.message}
               </p>
             )}
           </div>
+
+          {/* Hidden field — frequency is always "weekly" */}
+          <input type="hidden" {...register("postingFrequency")} value="weekly" />
         </CardContent>
       </Card>
 
@@ -331,10 +632,9 @@ export function BlogForm({
 
       <Separator />
 
-      {/* Actions */}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={isPending}>
-          {isPending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
+          {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
           {mode === "create" ? "Create Blog" : "Save Changes"}
         </Button>
         <Button

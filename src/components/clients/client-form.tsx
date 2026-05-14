@@ -13,13 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -36,8 +29,6 @@ export function ClientForm({ mode, defaultValues }: ClientFormProps) {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(createClientSchema),
@@ -48,15 +39,9 @@ export function ClientForm({ mode, defaultValues }: ClientFormProps) {
       contactPhone: defaultValues?.contactPhone ?? "",
       niche: defaultValues?.niche ?? "",
       totalBlogsTarget: defaultValues?.totalBlogsTarget ?? 0,
-      billingType: defaultValues?.billingType ?? "monthly",
-      billingAmount: defaultValues?.billingAmount ?? 0,
-      setupFee: defaultValues?.setupFee ?? 0,
-      billingStartDate: defaultValues?.billingStartDate ?? "",
       notesInternal: defaultValues?.notesInternal ?? "",
     },
   });
-
-  const billingType = watch("billingType");
 
   function onSubmit(data: CreateClientInput) {
     startTransition(async () => {
@@ -146,9 +131,13 @@ export function ClientForm({ mode, defaultValues }: ClientFormProps) {
             <Label htmlFor="niche">Niche</Label>
             <Input
               id="niche"
-              placeholder="e.g., Real Estate, SaaS, Healthcare"
+              placeholder="e.g., peptides, web_dev, gambling"
               {...register("niche")}
             />
+            <p className="text-xs text-muted-foreground">
+              Used to drive auto-generated post topics and brand voice. Match
+              one of the predefined niche keys for best results.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -158,69 +147,6 @@ export function ClientForm({ mode, defaultValues }: ClientFormProps) {
               type="number"
               min={0}
               {...register("totalBlogsTarget")}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Billing */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Billing Type</Label>
-            <Select
-              value={billingType}
-              onValueChange={(val) =>
-                setValue("billingType", val as CreateClientInput["billingType"])
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select billing type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="yearly">Yearly</SelectItem>
-                <SelectItem value="one_time">One Time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="billingAmount">Billing Amount ($)</Label>
-            <Input
-              id="billingAmount"
-              type="number"
-              min={0}
-              step="0.01"
-              {...register("billingAmount")}
-            />
-            {errors.billingAmount && (
-              <p className="text-sm text-destructive">
-                {errors.billingAmount.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="setupFee">Setup Fee ($)</Label>
-            <Input
-              id="setupFee"
-              type="number"
-              min={0}
-              step="0.01"
-              {...register("setupFee")}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="billingStartDate">Billing Start Date</Label>
-            <Input
-              id="billingStartDate"
-              type="date"
-              {...register("billingStartDate")}
             />
           </div>
         </CardContent>

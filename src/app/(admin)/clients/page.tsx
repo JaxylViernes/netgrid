@@ -27,7 +27,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your client accounts and billing
+            Manage your client accounts
           </p>
         </div>
         <Link href="/clients/new">

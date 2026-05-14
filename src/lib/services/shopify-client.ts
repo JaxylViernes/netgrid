@@ -329,8 +329,15 @@ export async function fetchAllLiveArticles(
     order: "published_at desc",
   };
 
-  for (let page = 0; page < MAX_PAGES && url; page++) {
-    const res = await client.get<{ articles: ShopifyArticle[] }>(
+    for (let page = 0; page < MAX_PAGES && url; page++) {
+    // Explicit annotation breaks the self-referential type inference TS
+    // hits when destructuring res.headers below. Axios's response generic
+    // doesn't propagate headers typing, so res.headers is `any` and TS
+    // refuses to infer `res` itself.
+    const res: {
+      data: { articles: ShopifyArticle[] };
+      headers: Record<string, string | undefined>;
+    } = await client.get<{ articles: ShopifyArticle[] }>(
       url,
       params ? { params } : undefined,
     );
@@ -339,9 +346,7 @@ export async function fetchAllLiveArticles(
     // Subsequent pages: Shopify returns a `Link` header with an absolute URL
     // for the next page (containing the `page_info` cursor). When we follow
     // it, the cursor encodes filters/order, so we drop our params.
-    const linkHeader =
-      (res.headers["link"] as string | undefined) ??
-      (res.headers["Link"] as string | undefined);
+    const linkHeader = res.headers["link"] ?? res.headers["Link"];
     const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
     if (nextMatch) {
       url = nextMatch[1];

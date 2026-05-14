@@ -1,6 +1,12 @@
 "use client";
 
-import { useForm, type UseFormRegister, type FieldErrors, type Path } from "react-hook-form";
+import {
+  useForm,
+  type Resolver,
+  type UseFormRegister,
+  type FieldErrors,
+  type Path,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -144,7 +150,12 @@ export function BlogForm({
       : [];
 
   const form = useForm<CreateBlogInput>({
-    resolver: zodResolver(createBlogSchema),
+    // Cast required because zod's z.infer (CreateBlogInput) is the OUTPUT type
+    // — fields with .default() are non-optional after parsing — but
+    // zodResolver internally uses the INPUT type where those fields are still
+    // optional. The runtime behaviour is identical; only the static type
+    // shape differs.
+    resolver: zodResolver(createBlogSchema) as unknown as Resolver<CreateBlogInput>,
     defaultValues: {
       clientId: defaultClientId || defaultValues?.clientId || "",
       domain: defaultValues?.domain || "",

@@ -15,8 +15,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Sharding via query string. Cron services and the web service are
+  // separate Render services with separate env var sets — env vars set
+  // on a cron service do NOT reach the web handler. So each cron
+  // service encodes its shard in CRON_PATH:
+  //   /api/cron/auto-publish?shard=0&shardCount=4
+  // The runner reads the params here and forwards them down.
+  const url = new URL(request.url);
+  const shardParam = url.searchParams.get("shard");
+  const shardCountParam = url.searchParams.get("shardCount");
+
   try {
-    const result = await runAutoPublishCron();
+    const result = await runAutoPublishCron({
+      shardIndex: shardParam !== null ? Number(shardParam) : undefined,
+      shardCount: shardCountParam !== null ? Number(shardCountParam) : undefined,
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("Auto-publish cron error:", error);

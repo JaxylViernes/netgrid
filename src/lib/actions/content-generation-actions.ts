@@ -98,7 +98,7 @@ const MIN_HOURS_BETWEEN_POSTS = 6;
  * can complete.
  */
 const MAX_BLOGS_PER_CRON_RUN = Number(
-  process.env.MAX_BLOGS_PER_CRON_RUN || "25",
+  process.env.MAX_BLOGS_PER_CRON_RUN || "50",
 );
 
 /**
@@ -134,6 +134,28 @@ function preferredHourForBlog(blogId: string): number {
     .digest("hex")
     .slice(0, 8);
   return parseInt(hex, 16) % 24;
+}
+
+/**
+ * Stable shard assignment for a blog — same blog ⇒ same shard, forever.
+ * Used to partition the active blog pool across parallel auto-publish
+ * cron services. Each service is configured with (shardIndex, shardCount)
+ * via query string and only processes blogs where:
+ *
+ *   shardForBlog(blog.id, shardCount) === shardIndex
+ *
+ * Uses bytes 8-15 of the SHA1 hex (different than preferredHourForBlog
+ * which uses bytes 0-7) so a blog's shard assignment is independent of
+ * its hour assignment.
+ */
+function shardForBlog(blogId: string, shardCount: number): number {
+  if (shardCount <= 1) return 0;
+  const hex = crypto
+    .createHash("sha1")
+    .update(blogId)
+    .digest("hex")
+    .slice(8, 16);
+  return parseInt(hex, 16) % shardCount;
 }
 
 /** Reason a blog is or isn't due. The string is what the cron reports. */
@@ -467,6 +489,12 @@ export async function generateAndPublishForBlog(
 
 export interface AutoPublishResult {
   considered: number;
+  /** Total active blogs in DB before shard filter (when sharded). */
+  totalActiveBlogs?: number;
+  /** This service's shard index (0-based). Present only when sharding. */
+  shardIndex?: number;
+  /** Total parallel shards. Present only when sharding. */
+  shardCount?: number;
   due: number;
   published: number;
   failed: number;
@@ -513,10 +541,30 @@ export interface AutoPublishResult {
  * In-memory counters update as we go so subsequent blogs in the same run
  * see correct per-client totals and per-blog daily counts.
  */
-export async function runAutoPublishCron(): Promise<AutoPublishResult> {
+export async function runAutoPublishCron(
+  opts: {
+    /** This cron service's shard index (0-based). Default 0 = no sharding. */
+    shardIndex?: number;
+    /** Total number of parallel cron services. Default 1 = no sharding. */
+    shardCount?: number;
+  } = {},
+): Promise<AutoPublishResult> {
   const now = new Date();
   const todayStart = startOfUtcDay(now);
   const currentHour = now.getUTCHours();
+
+  // Sharding params — validated + defaulted. When shardCount<=1 the
+  // shard filter is a no-op (every blog is in shard 0).
+  const shardCount =
+    Number.isInteger(opts.shardCount) && opts.shardCount! > 0
+      ? opts.shardCount!
+      : 1;
+  const shardIndex =
+    Number.isInteger(opts.shardIndex) &&
+    opts.shardIndex! >= 0 &&
+    opts.shardIndex! < shardCount
+      ? opts.shardIndex!
+      : 0;
 
   // 1. Active blogs with at least one cadence field set. Sort at the DB
   //    layer by lastPostVerifiedAt ASC NULLS FIRST so we can stream
@@ -579,7 +627,23 @@ export async function runAutoPublishCron(): Promise<AutoPublishResult> {
   const results: AutoPublishResult["results"] = [];
   let skipped = 0;
 
-  for (const { blog, clientTarget } of rows) {
+  // Filter the candidate list to this shard. When shardCount=1 every
+  // row passes (no-op). When >1, each blog is in exactly one shard.
+  const shardFilteredRows =
+    shardCount <= 1
+      ? rows
+      : rows.filter(
+          (r) => shardForBlog(r.blog.id, shardCount) === shardIndex,
+        );
+
+  if (shardCount > 1) {
+    console.info(
+      `[auto-publish] shard ${shardIndex + 1}/${shardCount} — ` +
+        `${shardFilteredRows.length} of ${rows.length} active blogs assigned to this shard`,
+    );
+  }
+
+  for (const { blog, clientTarget } of shardFilteredRows) {
     const preferredHour = preferredHourForBlog(blog.id);
     const todayCount = publishedTodayByBlog.get(blog.id) ?? 0;
     const clientCount = publishedByClient.get(blog.clientId) ?? 0;
@@ -729,7 +793,16 @@ export async function runAutoPublishCron(): Promise<AutoPublishResult> {
   }
 
   return {
-    considered: rows.length,
+    // When sharded, "considered" is the count this shard saw after
+    // filtering; totalActiveBlogs is the full network size.
+    considered: shardCount > 1 ? shardFilteredRows.length : rows.length,
+    ...(shardCount > 1
+      ? {
+          totalActiveBlogs: rows.length,
+          shardIndex,
+          shardCount,
+        }
+      : {}),
     due: queue.length,
     published,
     failed,
